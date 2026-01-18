@@ -9,7 +9,7 @@ terraform/
 ├── modules/
 │   ├── contabo-vm/         # Contabo VPS provisioning
 │   ├── k3s-cluster/        # K3s installation
-│   └── dns-failover/       # CoreDNS + Health Orchestrator
+│   └── dns-failover/       # CoreDNS + k8gb
 ├── environments/
 │   ├── contabo-europe/     # Primary (Germany/Nuremberg)
 │   └── contabo-india/      # Future (Mumbai - ME latency)
@@ -24,8 +24,6 @@ terraform/
 ```bash
 # Required tools
 terraform >= 1.5.0
-sops >= 3.8.0
-age >= 1.1.0
 ```
 
 ## Quick Start
@@ -33,16 +31,13 @@ age >= 1.1.0
 ```bash
 cd environments/contabo-europe
 
-# Decrypt secrets
-sops --decrypt terraform.tfvars.enc > terraform.tfvars
+# Bootstrap wizard handles credentials interactively
+# No secrets stored in Git - credentials entered at runtime
 
 # Initialize and apply
 terraform init
-terraform plan
-terraform apply
-
-# Clean up
-rm terraform.tfvars
+terraform plan -var-file=terraform.tfvars  # Created interactively
+terraform apply -var-file=terraform.tfvars
 ```
 
 ## Resources Created
@@ -61,15 +56,15 @@ rm terraform.tfvars
 
 ## Secrets Management
 
-Terraform secrets are encrypted with SOPS + age:
+**No SOPS:** Secrets are handled via interactive bootstrap:
 
-```bash
-# Edit encrypted secrets
-sops terraform.tfvars.enc
+1. **Bootstrap Wizard** prompts for cloud credentials
+2. Creates terraform.tfvars locally (not committed to Git)
+3. Provisions infrastructure
+4. Initializes Vault with generated unseal keys
+5. ESO PushSecrets sync to both regional Vaults
 
-# Encrypt new file
-sops --encrypt terraform.tfvars > terraform.tfvars.enc
-```
+See [ADR-SECRETS-MANAGEMENT](../external-secrets/docs/ADR-SECRETS-MANAGEMENT.md) for full details.
 
 ## Related Documentation
 
@@ -79,4 +74,4 @@ sops --encrypt terraform.tfvars > terraform.tfvars.enc
 
 ---
 
-*Part of [openova](https://github.com/openova-io)*
+*Part of [OpenOva](https://openova.io)*

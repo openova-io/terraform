@@ -8,8 +8,6 @@ Terraform-based infrastructure provisioning for Contabo VPS.
 
 ```bash
 terraform >= 1.5.0
-sops >= 3.8.0
-age >= 1.1.0
 ```
 
 ## Module Structure
@@ -19,7 +17,7 @@ terraform/
 ├── modules/
 │   ├── contabo-vm/         # VPS provisioning
 │   ├── k3s-cluster/        # K3s installation
-│   └── dns-failover/       # CoreDNS + Health Orchestrator
+│   └── dns-failover/       # CoreDNS + k8gb
 ├── environments/
 │   ├── contabo-europe/     # Primary
 │   └── contabo-india/      # Future
@@ -31,16 +29,15 @@ terraform/
 ```bash
 cd environments/contabo-europe
 
-# Decrypt secrets
-sops --decrypt terraform.tfvars.enc > terraform.tfvars
+# Bootstrap wizard handles credentials interactively
+# Creates terraform.tfvars (not committed to Git)
 
 # Initialize and apply
 terraform init
 terraform plan
 terraform apply
 
-# Clean up secrets
-rm terraform.tfvars
+# terraform.tfvars is never committed
 ```
 
 ## Resources Created
@@ -57,7 +54,7 @@ rm terraform.tfvars
 
 | Component | Reason |
 |-----------|--------|
-| traefik | Istio handles ingress |
+| traefik | Gateway API (Cilium) handles ingress |
 | servicelb | DNS-based failover |
 | local-storage | App-level replication |
 | flannel | Cilium CNI |
@@ -74,22 +71,22 @@ rm terraform.tfvars
 
 ## Secrets Management
 
-Terraform secrets encrypted with SOPS + age:
+**No SOPS:** All secrets handled via interactive bootstrap.
 
-```bash
-# Edit secrets
-sops terraform.tfvars.enc
+1. Bootstrap wizard prompts for credentials
+2. Creates terraform.tfvars locally (gitignored)
+3. Provisions infrastructure
+4. Initializes Vault
+5. ESO manages K8s secrets
 
-# Encrypt new file
-sops --encrypt terraform.tfvars > terraform.tfvars.enc
-```
+Operator saves Vault unseal keys offline - the only manual backup required.
 
 ## Post-Bootstrap
 
 After Terraform provisioning:
 
 1. Install Cilium CNI
-2. Bootstrap Flux
+2. Bootstrap Flux (from Gitea)
 3. Flux deploys remaining components
 
 ## Related

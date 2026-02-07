@@ -31,85 +31,18 @@ flowchart LR
 
 ---
 
-## Infrastructure Providers
+## Supported Providers
 
-### Provider Status
+OpenOva supports multiple cloud providers. Each provider has a corresponding Crossplane provider for day-2 operations.
 
-| Provider | Status | Crossplane | Notes |
-|----------|--------|------------|-------|
-| **Hetzner Cloud** | **Primary** | provider-hcloud | Best value, API quality |
-| Huawei Cloud | Coming | provider-huaweicloud | China/APAC focus |
-| Oracle Cloud (OCI) | Coming | provider-oci | Always Free tier |
-| AWS | Coming | provider-aws | Full featured |
-| GCP | Coming | provider-gcp | Full featured |
-| Azure | Coming | provider-azure | Full featured |
-| ~~Contabo~~ | **Dropped** | None | No Crossplane support |
-
-### Why Hetzner Cloud?
-
-| Factor | Hetzner | AWS/GCP/Azure | Contabo |
-|--------|---------|---------------|---------|
-| Cost | Low | High | Low |
-| Crossplane | provider-hcloud | Full support | **None** |
-| API Quality | Good | Excellent | Basic |
-| Regions | EU, US | Global | EU, US, Asia |
-| LoadBalancer | Native | Native | None |
-
-**Key Decision:** Contabo dropped due to lack of Crossplane provider support.
-
----
-
-## Cost Comparison
-
-### Budget Providers (Under $25/month for 24GB RAM)
-
-| Provider | Cost/24GB | Terraform Support | Notes |
-|----------|-----------|-------------------|-------|
-| **Hetzner** | ~€21 | Official | **Selected** - Best API, Crossplane support |
-| Netcup | ~€20 | None | No automation |
-| Hostinger | ~€24 | Official | Less mature |
-
-### Mid-Range Providers ($50-150/month)
-
-| Provider | Cost/24GB | Notes |
-|----------|-----------|-------|
-| Vultr | ~$105 | Best global coverage |
-| DigitalOcean | ~$95 | Excellent docs |
-| Linode/Akamai | ~$179 | Akamai backing |
-
-### Hyperscalers
-
-| Provider | Cost/24GB | Notes |
-|----------|-----------|-------|
-| Oracle | ~$96/$0 | Free tier but capacity issues |
-| AWS | ~$263 | Full featured |
-| GCP | ~$284 | Full featured |
-| Azure | ~$282 | Full featured |
-
----
-
-## Hetzner Configuration
-
-### Available Regions
-
-| Region | Location | Use Case |
-|--------|----------|----------|
-| `fsn1` | Falkenstein, DE | Primary EU |
-| `nbg1` | Nuremberg, DE | DR EU |
-| `hel1` | Helsinki, FI | EU alternative |
-| `ash` | Ashburn, US | Primary US |
-| `hil` | Hillsboro, US | DR US |
-
-### Instance Types
-
-| Type | vCPU | RAM | SSD | Monthly |
-|------|------|-----|-----|---------|
-| CX22 | 2 | 4GB | 40GB | €4.59 |
-| CX32 | 4 | 8GB | 80GB | €9.18 |
-| CX42 | 8 | 16GB | 160GB | €18.35 |
-| CX52 | 16 | 32GB | 320GB | €36.70 |
-
-**Recommended:** CX32 (3 nodes) for minimum production cluster
+| Provider | Crossplane Provider |
+|----------|---------------------|
+| Hetzner Cloud | provider-hcloud |
+| Huawei Cloud | provider-huaweicloud |
+| Oracle Cloud (OCI) | provider-oci |
+| AWS | provider-aws |
+| GCP | provider-gcp |
+| Azure | provider-azure |
 
 ---
 
@@ -118,12 +51,12 @@ flowchart LR
 ```
 terraform/
 ├── modules/
-│   ├── hetzner-vm/        # Hetzner VPS provisioning
-│   ├── k3s-cluster/       # K3s installation
-│   └── dns-failover/      # CoreDNS + k8gb
+│   ├── <provider>-vm/    # Provider-specific VPS provisioning
+│   ├── k3s-cluster/      # K3s installation
+│   └── dns-failover/     # CoreDNS + k8gb
 ├── environments/
-│   ├── hetzner-eu/        # Primary (Falkenstein)
-│   └── hetzner-us/        # US region
+│   ├── <provider>-<region>/  # Per-environment configs
+│   └── ...
 └── README.md
 ```
 
@@ -132,7 +65,7 @@ terraform/
 ## Quick Start
 
 ```bash
-cd environments/hetzner-eu
+cd environments/<provider>-<region>
 
 # Bootstrap wizard handles credentials interactively
 # Creates terraform.tfvars (not committed to Git)
@@ -145,62 +78,35 @@ terraform apply -var-file=terraform.tfvars
 
 ---
 
-## Terraform Configuration
+## Provider Configuration
 
-### Hetzner Provider
+### Generic Provider Setup
 
 ```hcl
 terraform {
   required_providers {
-    hcloud = {
-      source  = "hetznercloud/hcloud"
-      version = "~> 1.45"
+    <provider> = {
+      source  = "<provider-source>"
+      version = "~> <version>"
     }
   }
 }
 
-provider "hcloud" {
-  token = var.hcloud_token
+provider "<provider>" {
+  # Credentials via terraform.tfvars or environment variables
 }
 
-resource "hcloud_server" "k8s_node" {
+resource "<provider>_server" "k8s_node" {
   count       = 3
   name        = "<tenant>-k8s-${count.index + 1}"
-  server_type = "cx32"
-  image       = "ubuntu-22.04"
-  location    = "fsn1"
-
-  ssh_keys = [hcloud_ssh_key.default.id]
-
-  labels = {
-    tenant = "<tenant>"
-    role   = "k8s-node"
-  }
+  # Provider-specific configuration
 }
 
-resource "hcloud_network" "k8s_network" {
+resource "<provider>_network" "k8s_network" {
   name     = "<tenant>-network"
   ip_range = "10.0.0.0/16"
 }
-
-resource "hcloud_network_subnet" "k8s_subnet" {
-  network_id   = hcloud_network.k8s_network.id
-  type         = "cloud"
-  network_zone = "eu-central"
-  ip_range     = "10.0.1.0/24"
-}
 ```
-
----
-
-## Resources Created
-
-| Resource | Count | Specs |
-|----------|-------|-------|
-| Hetzner CX32 | 3 | 4 vCPU, 8GB RAM, 80GB SSD |
-| K3s Server | 3 | Control Plane + etcd |
-| Public IPv4 | 3 | Static |
-| Private Network | 1 | 10.0.0.0/16 |
 
 ---
 
@@ -231,14 +137,14 @@ resource "hcloud_network_subnet" "k8s_subnet" {
 
 ```mermaid
 flowchart TB
-    subgraph Region1["Region 1 (fsn1)"]
+    subgraph Region1["Region 1"]
         K8s1[K8s Cluster]
-        LB1[Hetzner LB]
+        LB1[Cloud LB]
     end
 
-    subgraph Region2["Region 2 (nbg1)"]
+    subgraph Region2["Region 2"]
         K8s2[K8s Cluster]
-        LB2[Hetzner LB]
+        LB2[Cloud LB]
     end
 
     subgraph DNS["DNS (k8gb + ExternalDNS)"]
@@ -282,16 +188,14 @@ All subsequent cloud resources are managed by **Crossplane**, not Terraform.
 ## Consequences
 
 **Positive:**
-- Cost-effective infrastructure
+- Multi-cloud support
 - Crossplane support for Day-2
-- Native LoadBalancer support
-- Good API for automation
+- Native LoadBalancer support (where available)
 - Multi-region capable
 
 **Negative:**
-- Fewer regions than hyperscalers
-- Less mature than AWS/GCP/Azure
-- Limited managed services
+- Provider-specific modules required
+- Some providers have limited managed services
 
 ---
 
